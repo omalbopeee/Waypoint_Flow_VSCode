@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');const C=require('../dist/core.js');let m=C.model();
+assert.match(m.checkCandidate('DEMO001','VEH035',1),/workshop/);assert.match(m.checkCandidate('DEMO001','VEH001',1),/only accepts vans/);
+for(const id of ['DEMO001','DEMO002','DEMO003'])m.allocate(id,'VEH036',1);
+assert.match(m.checkCandidate('DEMO004','VEH036',1),/Volume/);assert.match(m.checkCandidate('DEMO004','VEH036',2),/cannot complete/);assert.throws(()=>m.publish(),/Every confirmed/);
+m.defer('DEMO004','No feasible capacity before the receiving window');m.publish();m.acknowledge('DEMO002');m.countLoad('DEMO002',[24,18,10]);assert.equal(m.order('DEMO002').status,'loading_issue');assert.throws(()=>m.start('DEMO001'),/Every order/);m.replenish('DEMO002');assert.throws(()=>m.countLoad('DEMO002',[24,18,12]),/Acknowledge/);
+for(const id of ['DEMO001','DEMO002','DEMO003']){m.acknowledge(id);m.countLoad(id,[24,18,12]);}m.start('DEMO001');
+m.state.offline=true;m.arrive('DEMO002');m.deliver('DEMO002',54,'Demo recipient','Recipient confirmation');assert.equal(m.order('DEMO002').status,'in_transit');assert.equal(m.state.queue.length,2);
+m=C.model(JSON.parse(JSON.stringify(m.state)));m.state.offline=false;assert.equal(m.sync(),0);assert.equal(m.order('DEMO002').status,'delivered');const history=m.order('DEMO002').history.length;m.sync();assert.equal(m.order('DEMO002').history.length,history);
+m.receive('DEMO002',52,'Two cartons missing on receipt');assert.equal(m.order('DEMO002').status,'receipt_issue');assert.equal(m.order('DEMO002').delivery.qty,54);m.resolveReceipt('DEMO002','Replacement arranged with store');assert.equal(m.order('DEMO002').receipt.qty,52);
+assert.equal(m.newOrder('OUT001',24,'chilled','15:59').run,'2026-06-23');assert.equal(m.newOrder('OUT001',24,'chilled','16:00').run,'2026-06-24');
+m.state.offline=true;m.arrive('DEMO001');m.deliver('DEMO001',54,'Demo','Recipient confirmation');m.order('DEMO001').version++;m.state.offline=false;assert.equal(m.sync(),2);assert.equal(m.order('DEMO001').status,'in_transit');for(const e of m.state.queue)m.reviewConflict(e.id);assert.equal(m.sync(),0);assert.equal(m.order('DEMO001').status,'delivered');
+console.log('PASS: constraints, publication, load blocking, offline persistence, idempotent sync, conflict recovery, store discrepancy, cutoff.');
